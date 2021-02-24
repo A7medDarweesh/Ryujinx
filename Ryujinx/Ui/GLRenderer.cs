@@ -430,16 +430,30 @@ namespace Ryujinx.Ui
 
                 _chrono.Restart();
 
+                bool needsFlush = false;
+
                 if (_device.WaitFifo())
                 {
                     _device.Statistics.RecordFifoStart();
                     _device.ProcessFrame();
                     _device.Statistics.RecordFifoEnd();
+
+                    needsFlush = true;
                 }
 
                 while (_device.ConsumeFrameAvailable())
                 {
+                    needsFlush = false;
                     _device.PresentFrame(SwapBuffers);
+                }
+
+                if (needsFlush)
+                {
+                    // The guest may be waiting for some syncpoint to be hit before submitting more commands.
+                    // For example, if the game thread needs to flush a buffer.
+                    // This makes sure that the GL commands up to this point will be processed in finite time.
+
+                    GL.Flush();
                 }
 
                 if (_ticks >= _ticksPerFrame)
