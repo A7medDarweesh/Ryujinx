@@ -1,24 +1,30 @@
 using LibHac;
+using LibHac.Common;
 using LibHac.Fs;
-
+using LibHac.Fs.Fsa;
 using static Ryujinx.HLE.Utilities.StringUtils;
 
 namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
 {
     class IFileSystem : IpcService
     {
-        private LibHac.Fs.IFileSystem _fileSystem;
+        private LibHac.Fs.Fsa.IFileSystem _fileSystem;
 
-        public IFileSystem(LibHac.Fs.IFileSystem provider)
+        public IFileSystem(LibHac.Fs.Fsa.IFileSystem provider)
         {
             _fileSystem = provider;
+        }
+
+        public LibHac.Fs.Fsa.IFileSystem GetBaseFileSystem()
+        {
+            return _fileSystem;
         }
 
         [Command(0)]
         // CreateFile(u32 createOption, u64 size, buffer<bytes<0x301>, 0x19, 0x301> path)
         public ResultCode CreateFile(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             CreateFileOptions createOption = (CreateFileOptions)context.RequestData.ReadInt32();
             context.RequestData.BaseStream.Position += 4;
@@ -32,7 +38,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // DeleteFile(buffer<bytes<0x301>, 0x19, 0x301> path)
         public ResultCode DeleteFile(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             return (ResultCode)_fileSystem.DeleteFile(name).Value;
         }
@@ -41,7 +47,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // CreateDirectory(buffer<bytes<0x301>, 0x19, 0x301> path)
         public ResultCode CreateDirectory(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             return (ResultCode)_fileSystem.CreateDirectory(name).Value;
         }
@@ -50,7 +56,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // DeleteDirectory(buffer<bytes<0x301>, 0x19, 0x301> path)
         public ResultCode DeleteDirectory(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             return (ResultCode)_fileSystem.DeleteDirectory(name).Value;
         }
@@ -59,7 +65,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // DeleteDirectoryRecursively(buffer<bytes<0x301>, 0x19, 0x301> path)
         public ResultCode DeleteDirectoryRecursively(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             return (ResultCode)_fileSystem.DeleteDirectoryRecursively(name).Value;
         }
@@ -68,8 +74,8 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // RenameFile(buffer<bytes<0x301>, 0x19, 0x301> oldPath, buffer<bytes<0x301>, 0x19, 0x301> newPath)
         public ResultCode RenameFile(ServiceCtx context)
         {
-            string oldName = ReadUtf8String(context, 0);
-            string newName = ReadUtf8String(context, 1);
+            U8Span oldName = ReadUtf8Span(context, 0);
+            U8Span newName = ReadUtf8Span(context, 1);
 
             return (ResultCode)_fileSystem.RenameFile(oldName, newName).Value;
         }
@@ -78,8 +84,8 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // RenameDirectory(buffer<bytes<0x301>, 0x19, 0x301> oldPath, buffer<bytes<0x301>, 0x19, 0x301> newPath)
         public ResultCode RenameDirectory(ServiceCtx context)
         {
-            string oldName = ReadUtf8String(context, 0);
-            string newName = ReadUtf8String(context, 1);
+            U8Span oldName = ReadUtf8Span(context, 0);
+            U8Span newName = ReadUtf8Span(context, 1);
 
             return (ResultCode)_fileSystem.RenameDirectory(oldName, newName).Value;
         }
@@ -88,7 +94,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // GetEntryType(buffer<bytes<0x301>, 0x19, 0x301> path) -> nn::fssrv::sf::DirectoryEntryType
         public ResultCode GetEntryType(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             Result result = _fileSystem.GetEntryType(out DirectoryEntryType entryType, name);
 
@@ -103,9 +109,9 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         {
             OpenMode mode = (OpenMode)context.RequestData.ReadInt32();
 
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
-            Result result = _fileSystem.OpenFile(out LibHac.Fs.IFile file, name, mode);
+            Result result = _fileSystem.OpenFile(out LibHac.Fs.Fsa.IFile file, name, mode);
 
             if (result.IsSuccess())
             {
@@ -123,9 +129,9 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         {
             OpenDirectoryMode mode = (OpenDirectoryMode)context.RequestData.ReadInt32();
 
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
-            Result result = _fileSystem.OpenDirectory(out LibHac.Fs.IDirectory dir, name, mode);
+            Result result = _fileSystem.OpenDirectory(out LibHac.Fs.Fsa.IDirectory dir, name, mode);
 
             if (result.IsSuccess())
             {
@@ -148,7 +154,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // GetFreeSpaceSize(buffer<bytes<0x301>, 0x19, 0x301> path) -> u64 totalFreeSpace
         public ResultCode GetFreeSpaceSize(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             Result result = _fileSystem.GetFreeSpaceSize(out long size, name);
 
@@ -161,7 +167,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // GetTotalSpaceSize(buffer<bytes<0x301>, 0x19, 0x301> path) -> u64 totalSize
         public ResultCode GetTotalSpaceSize(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             Result result = _fileSystem.GetTotalSpaceSize(out long size, name);
 
@@ -174,7 +180,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // CleanDirectoryRecursively(buffer<bytes<0x301>, 0x19, 0x301> path)
         public ResultCode CleanDirectoryRecursively(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             return (ResultCode)_fileSystem.CleanDirectoryRecursively(name).Value;
         }
@@ -183,7 +189,7 @@ namespace Ryujinx.HLE.HOS.Services.Fs.FileSystemProxy
         // GetFileTimeStampRaw(buffer<bytes<0x301>, 0x19, 0x301> path) -> bytes<0x20> timestamp
         public ResultCode GetFileTimeStampRaw(ServiceCtx context)
         {
-            string name = ReadUtf8String(context);
+            U8Span name = ReadUtf8Span(context);
 
             Result result = _fileSystem.GetFileTimeStampRaw(out FileTimeStampRaw timestamp, name);
 

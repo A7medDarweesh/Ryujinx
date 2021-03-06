@@ -1,15 +1,26 @@
 ﻿using LibHac;
-using LibHac.FsService;
+using LibHac.FsSrv;
 
 namespace Ryujinx.HLE.HOS.Services.Fs
 {
     class IDeviceOperator : IpcService
     {
-        private LibHac.FsService.IDeviceOperator _baseOperator;
+        private LibHac.FsSrv.IDeviceOperator _baseOperator;
 
-        public IDeviceOperator(LibHac.FsService.IDeviceOperator baseOperator)
+        public IDeviceOperator(LibHac.FsSrv.IDeviceOperator baseOperator)
         {
             _baseOperator = baseOperator;
+        }
+
+        [Command(0)]
+        // IsSdCardInserted() -> b8 is_inserted
+        public ResultCode IsSdCardInserted(ServiceCtx context)
+        {
+            Result result = _baseOperator.IsSdCardInserted(out bool isInserted);
+
+            context.ResponseData.Write(isInserted);
+
+            return (ResultCode)result.Value;
         }
 
         [Command(200)]

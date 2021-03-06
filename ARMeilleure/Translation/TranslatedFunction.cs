@@ -1,3 +1,5 @@
+using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace ARMeilleure.Translation
@@ -6,15 +8,20 @@ namespace ARMeilleure.Translation
     {
         private const int MinCallsForRejit = 100;
 
-        private GuestFunction _func;
+        private readonly GuestFunction _func; // Ensure that this delegate will not be garbage collected.
 
-        private bool _rejit;
-        private int  _callCount;
+        private int _callCount;
 
-        public TranslatedFunction(GuestFunction func, bool rejit)
+        public ulong GuestSize { get; }
+        public bool HighCq { get; }
+        public IntPtr FuncPtr { get; }
+
+        public TranslatedFunction(GuestFunction func, ulong guestSize, bool highCq)
         {
-            _func  = func;
-            _rejit = rejit;
+            _func = func;
+            GuestSize = guestSize;
+            HighCq = highCq;
+            FuncPtr = Marshal.GetFunctionPointerForDelegate(func);
         }
 
         public ulong Execute(State.ExecutionContext context)
@@ -24,7 +31,12 @@ namespace ARMeilleure.Translation
 
         public bool ShouldRejit()
         {
-            return _rejit && Interlocked.Increment(ref _callCount) == MinCallsForRejit;
+            return !HighCq && Interlocked.Increment(ref _callCount) == MinCallsForRejit;
+        }
+
+        public void ResetCallCount()
+        {
+            Interlocked.Exchange(ref _callCount, 0);
         }
     }
 }

@@ -3,10 +3,7 @@ using Ryujinx.Common.Logging;
 using Ryujinx.HLE.HOS.Services.Nifm.StaticService.GeneralService;
 using Ryujinx.HLE.HOS.Services.Nifm.StaticService.Types;
 using System;
-using System.Linq;
-using System.Net;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
 
 namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService
 {
@@ -30,9 +27,10 @@ namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService
         public ResultCode GetClientId(ServiceCtx context)
         {
             long position = context.Request.RecvListBuff[0].Position;
-            long size     = context.Request.RecvListBuff[0].Size;
 
-            context.Memory.WriteInt32(position, _generalServiceDetail.ClientId);
+            context.Response.PtrBuff[0] = context.Response.PtrBuff[0].WithSize(4);
+
+            context.Memory.Write((ulong)position, _generalServiceDetail.ClientId);
 
             return ResultCode.Success;
         }
@@ -48,7 +46,7 @@ namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService
             // Doesn't occur in our case.
             // return ResultCode.ObjectIsNull;
 
-            Logger.PrintStub(LogClass.ServiceNifm, new { version });
+            Logger.Stub?.PrintStub(LogClass.ServiceNifm, new { version });
 
             return ResultCode.Success;
         }
@@ -57,18 +55,35 @@ namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService
         // GetCurrentIpAddress() -> nn::nifm::IpV4Address
         public ResultCode GetCurrentIpAddress(ServiceCtx context)
         {
-            if (!NetworkInterface.GetIsNetworkAvailable())
+            (_, UnicastIPAddressInformation unicastAddress) = GetLocalInterface();
+
+            if (unicastAddress == null)
             {
                 return ResultCode.NoInternetConnection;
             }
 
-            IPHostEntry host = Dns.GetHostEntry(Dns.GetHostName());
+            context.ResponseData.WriteStruct(new IpV4Address(unicastAddress.Address));
 
-            IPAddress address = host.AddressList.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
+            Logger.Info?.Print(LogClass.ServiceNifm, $"Console's local IP is \"{unicastAddress.Address}\".");
 
-            context.ResponseData.Write(BitConverter.ToUInt32(address.GetAddressBytes()));
+            return ResultCode.Success;
+        }
 
-            Logger.PrintInfo(LogClass.ServiceNifm, $"Console's local IP is \"{address}\".");
+        [Command(15)]
+        // GetCurrentIpConfigInfo() -> (nn::nifm::IpAddressSetting, nn::nifm::DnsSetting)
+        public ResultCode GetCurrentIpConfigInfo(ServiceCtx context)
+        {
+            (IPInterfaceProperties interfaceProperties, UnicastIPAddressInformation unicastAddress) = GetLocalInterface();
+
+            if (interfaceProperties == null)
+            {
+                return ResultCode.NoInternetConnection;
+            }
+
+            Logger.Info?.Print(LogClass.ServiceNifm, $"Console's local IP is \"{unicastAddress.Address}\".");
+
+            context.ResponseData.WriteStruct(new IpAddressSetting(interfaceProperties, unicastAddress));
+            context.ResponseData.WriteStruct(new DnsSetting(interfaceProperties));
 
             return ResultCode.Success;
         }
@@ -101,11 +116,56 @@ namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService
             long position = context.Request.PtrBuff[0].Position;
             long size     = context.Request.PtrBuff[0].Size;
 
-            int clientId = context.Memory.ReadInt32(position);
+            int clientId = context.Memory.Read<int>((ulong)position);
 
             context.ResponseData.Write(GeneralServiceManager.Get(clientId).IsAnyInternetRequestAccepted);
 
             return ResultCode.Success;
+        }
+
+        private (IPInterfaceProperties, UnicastIPAddressInformation) GetLocalInterface()
+        {
+            if (!NetworkInterface.GetIsNetworkAvailable())
+            {
+                return (null, null);
+            }
+
+            IPInterfaceProperties       targetProperties  = null;
+            UnicastIPAddressInformation targetAddressInfo = null;
+
+            NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
+
+            foreach (NetworkInterface adapter in interfaces)
+            {
+                // Ignore loopback and non IPv4 capable interface.
+                if (adapter.NetworkInterfaceType != NetworkInterfaceType.Loopback && adapter.Supports(NetworkInterfaceComponent.IPv4))
+                {
+                    IPInterfaceProperties properties = adapter.GetIPProperties();
+
+                    if (properties.GatewayAddresses.Count > 0 && properties.DnsAddresses.Count > 1)
+                    {
+                        foreach (UnicastIPAddressInformation info in properties.UnicastAddresses)
+                        {
+                            // Only accept an IPv4 address
+                            if (info.Address.GetAddressBytes().Length == 4)
+                            {
+                                targetProperties  = properties;
+                                targetAddressInfo = info;
+
+                                break;
+                            }
+                        }
+                    }
+
+                    // Found the target interface, stop here.
+                    if (targetProperties != null)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            return (targetProperties, targetAddressInfo);
         }
 
         public void Dispose()

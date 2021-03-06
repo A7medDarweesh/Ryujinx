@@ -1,4 +1,5 @@
-﻿using Ryujinx.HLE.HOS;
+﻿using LibHac.Common;
+using Ryujinx.HLE.HOS;
 using System;
 using System.Globalization;
 using System.IO;
@@ -59,7 +60,7 @@ namespace Ryujinx.HLE.Utilities
             {
                 while (size-- > 0)
                 {
-                    byte value = context.Memory.ReadByte(position++);
+                    byte value = context.Memory.Read<byte>((ulong)position++);
 
                     if (value == 0)
                     {
@@ -73,6 +74,16 @@ namespace Ryujinx.HLE.Utilities
             }
         }
 
+        public static U8Span ReadUtf8Span(ServiceCtx context, int index = 0)
+        {
+            ulong position = (ulong)context.Request.PtrBuff[index].Position;
+            ulong size     = (ulong)context.Request.PtrBuff[index].Size;
+
+            ReadOnlySpan<byte> buffer = context.Memory.GetSpan(position, (int)size);
+
+            return new U8Span(buffer);
+        }
+
         public static string ReadUtf8StringSend(ServiceCtx context, int index = 0)
         {
             long position = context.Request.SendBuff[index].Position;
@@ -82,7 +93,7 @@ namespace Ryujinx.HLE.Utilities
             {
                 while (size-- > 0)
                 {
-                    byte value = context.Memory.ReadByte(position++);
+                    byte value = context.Memory.Read<byte>((ulong)position++);
 
                     if (value == 0)
                     {

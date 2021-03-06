@@ -1,5 +1,7 @@
 using LibHac;
+using LibHac.Common;
 using LibHac.Fs;
+using LibHac.Fs.Fsa;
 using LibHac.FsSystem;
 using LibHac.FsSystem.NcaUtils;
 using Ryujinx.Common.Logging;
@@ -28,13 +30,14 @@ namespace Ryujinx.HLE.HOS.Services.Settings
         public ResultCode GetFirmwareVersion2(ServiceCtx context)
         {
             long replyPos  = context.Request.RecvListBuff[0].Position;
-            long replySize = context.Request.RecvListBuff[0].Size;
+
+            context.Response.PtrBuff[0] = context.Response.PtrBuff[0].WithSize(0x100L);
 
             byte[] firmwareData = GetFirmwareData(context.Device);
 
             if (firmwareData != null)
             {
-                context.Memory.WriteBytes(replyPos, firmwareData);
+                context.Memory.Write((ulong)replyPos, firmwareData);
 
                 return ResultCode.Success;
             }
@@ -77,7 +80,7 @@ namespace Ryujinx.HLE.HOS.Services.Settings
 
                 writer.Write(Encoding.ASCII.GetBytes(build));
 
-                context.Memory.WriteBytes(replyPos, ms.ToArray());
+                context.Memory.Write((ulong)replyPos, ms.ToArray());
             }
 
             return ResultCode.Success;
@@ -113,10 +116,15 @@ namespace Ryujinx.HLE.HOS.Services.Settings
             long namePos  = context.Request.PtrBuff[1].Position;
             long nameSize = context.Request.PtrBuff[1].Size;
 
-            byte[] Class = context.Memory.ReadBytes(classPos, classSize);
-            byte[] name  = context.Memory.ReadBytes(namePos, nameSize);
+            byte[] classBuffer = new byte[classSize];
 
-            string askedSetting = Encoding.ASCII.GetString(Class).Trim('\0') + "!" + Encoding.ASCII.GetString(name).Trim('\0');
+            context.Memory.Read((ulong)classPos, classBuffer);
+
+            byte[] nameBuffer = new byte[nameSize];
+
+            context.Memory.Read((ulong)namePos, nameBuffer);
+
+            string askedSetting = Encoding.ASCII.GetString(classBuffer).Trim('\0') + "!" + Encoding.ASCII.GetString(nameBuffer).Trim('\0');
 
             NxSettings.Settings.TryGetValue(askedSetting, out object nxSetting);
 
@@ -160,10 +168,15 @@ namespace Ryujinx.HLE.HOS.Services.Settings
             long replyPos  = context.Request.ReceiveBuff[0].Position;
             long replySize = context.Request.ReceiveBuff[0].Size;
 
-            byte[] Class = context.Memory.ReadBytes(classPos, classSize);
-            byte[] name  = context.Memory.ReadBytes(namePos, nameSize);
+            byte[] classBuffer = new byte[classSize];
 
-            string askedSetting = Encoding.ASCII.GetString(Class).Trim('\0') + "!" + Encoding.ASCII.GetString(name).Trim('\0');
+            context.Memory.Read((ulong)classPos, classBuffer);
+
+            byte[] nameBuffer = new byte[nameSize];
+
+            context.Memory.Read((ulong)namePos, nameBuffer);
+
+            string askedSetting = Encoding.ASCII.GetString(classBuffer).Trim('\0') + "!" + Encoding.ASCII.GetString(nameBuffer).Trim('\0');
 
             NxSettings.Settings.TryGetValue(askedSetting, out object nxSetting);
 
@@ -175,7 +188,7 @@ namespace Ryujinx.HLE.HOS.Services.Settings
                 {
                     if (stringValue.Length + 1 > replySize)
                     {
-                        Logger.PrintError(LogClass.ServiceSet, $"{askedSetting} String value size is too big!");
+                        Logger.Error?.Print(LogClass.ServiceSet, $"{askedSetting} String value size is too big!");
                     }
                     else
                     {
@@ -196,14 +209,26 @@ namespace Ryujinx.HLE.HOS.Services.Settings
                     throw new NotImplementedException(nxSetting.GetType().Name);
                 }
 
-                context.Memory.WriteBytes(replyPos, settingBuffer);
+                context.Memory.Write((ulong)replyPos, settingBuffer);
 
-                Logger.PrintDebug(LogClass.ServiceSet, $"{askedSetting} set value: {nxSetting} as {nxSetting.GetType()}");
+                Logger.Debug?.Print(LogClass.ServiceSet, $"{askedSetting} set value: {nxSetting} as {nxSetting.GetType()}");
             }
             else
             {
-                Logger.PrintError(LogClass.ServiceSet, $"{askedSetting} not found!");
+                Logger.Error?.Print(LogClass.ServiceSet, $"{askedSetting} not found!");
             }
+
+            return ResultCode.Success;
+        }
+
+       [Command(60)]
+        // IsUserSystemClockAutomaticCorrectionEnabled() -> bool
+        public ResultCode IsUserSystemClockAutomaticCorrectionEnabled(ServiceCtx context)
+        {
+            // NOTE: When set to true, is automatically synced with the internet.
+            context.ResponseData.Write(true);
+
+            Logger.Stub?.PrintStub(LogClass.ServiceSet, "Stubbed");
 
             return ResultCode.Success;
         }
@@ -231,7 +256,7 @@ namespace Ryujinx.HLE.HOS.Services.Settings
 
                 IFileSystem firmwareRomFs = firmwareContent.OpenFileSystem(NcaSectionType.Data, device.System.FsIntegrityCheckLevel);
 
-                Result result = firmwareRomFs.OpenFile(out IFile firmwareFile, "/file", OpenMode.Read);
+                Result result = firmwareRomFs.OpenFile(out IFile firmwareFile, "/file".ToU8Span(), OpenMode.Read);
                 if (result.IsFailure())
                 {
                     return null;

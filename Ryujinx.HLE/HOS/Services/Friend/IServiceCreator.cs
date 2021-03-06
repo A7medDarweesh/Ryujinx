@@ -1,6 +1,6 @@
 using Ryujinx.Common;
+using Ryujinx.HLE.HOS.Services.Account.Acc;
 using Ryujinx.HLE.HOS.Services.Friend.ServiceCreator;
-using Ryujinx.HLE.Utilities;
 
 namespace Ryujinx.HLE.HOS.Services.Friend
 {
@@ -28,10 +28,10 @@ namespace Ryujinx.HLE.HOS.Services.Friend
         }
 
         [Command(1)] // 2.0.0+
-        // CreateNotificationService(nn::account::Uid) -> object<nn::friends::detail::ipc::INotificationService>
+        // CreateNotificationService(nn::account::Uid userId) -> object<nn::friends::detail::ipc::INotificationService>
         public ResultCode CreateNotificationService(ServiceCtx context)
         {
-            UInt128 userId = context.RequestData.ReadStruct<UInt128>();
+            UserId userId = context.RequestData.ReadStruct<UserId>();
 
             if (userId.IsNull)
             {

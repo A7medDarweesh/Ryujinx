@@ -24,6 +24,11 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE
         // Write(u64, buffer<bytes, 0x21>)
         public ResultCode Write(ServiceCtx context)
         {
+            if (_storage.IsReadOnly)
+            {
+                return ResultCode.ObjectInvalid;
+            }
+
             long writePosition = context.RequestData.ReadInt64();
 
             if (writePosition > _storage.Data.Length)
@@ -44,7 +49,9 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE
                     size = maxSize;
                 }
 
-                byte[] data = context.Memory.ReadBytes(position, size);
+                byte[] data = new byte[size];
+
+                context.Memory.Read((ulong)position, data);
 
                 Buffer.BlockCopy(data, 0, _storage.Data, (int)writePosition, (int)size);
             }
@@ -71,7 +78,7 @@ namespace Ryujinx.HLE.HOS.Services.Am.AppletAE
 
             Buffer.BlockCopy(_storage.Data, (int)readPosition, data, 0, (int)size);
 
-            context.Memory.WriteBytes(position, data);
+            context.Memory.Write((ulong)position, data);
 
             return ResultCode.Success;
         }
